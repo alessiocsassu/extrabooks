@@ -1,0 +1,320 @@
+@page "/"
+@inject BooksApiClient Api
+
+<PageTitle>Libri - ExtraBooks</PageTitle>
+
+<header class="navbar border-bottom py-3">
+    <div class="container-fluid px-3 px-lg-5">
+        <a class="navbar-brand fw-semibold" href="/">ExtraBooks</a>
+        <span class="small fw-medium">Libreria</span>
+    </div>
+</header>
+
+<main class="library-page container-fluid px-3 px-lg-5 py-4 py-lg-5">
+    <div class="d-flex flex-wrap justify-content-between align-items-center gap-3 mb-4">
+        <h1 class="h2 fw-semibold mb-0">I miei libri</h1>
+        <button type="button" class="btn btn-primary px-3" @onclick="StartCreate" disabled="@saving">Aggiungi libro</button>
+    </div>
+
+    @if (!string.IsNullOrWhiteSpace(error))
+    {
+        <div class="alert alert-danger" role="alert">
+            @error
+            @if (!formVisible)
+            {
+                <button type="button" class="btn btn-sm btn-outline-danger ms-2" @onclick="LoadAsync">Riprova</button>
+            }
+        </div>
+    }
+
+    @if (formVisible)
+    {
+        <section class="card mb-4" aria-labelledby="editor-title">
+            <div class="card-header px-3 px-lg-4 py-3">
+                <h2 id="editor-title" class="h5 mb-0">@(editingId.HasValue ? "Modifica libro" : "Nuovo libro")</h2>
+            </div>
+            <div class="card-body p-3 p-lg-4">
+                <EditForm Model="@form" OnValidSubmit="SaveAsync" FormName="book-editor">
+                    <DataAnnotationsValidator />
+                    <ValidationSummary class="text-danger" />
+                    <fieldset disabled="@saving">
+                        <div class="row g-3">
+                            <div class="col-md-6">
+                                <label for="title" class="form-label">Titolo *</label>
+                                <InputText id="title" class="form-control" @bind-Value="form.Title" />
+                            </div>
+                            <div class="col-md-6">
+                                <label for="author" class="form-label">Autore *</label>
+                                <InputText id="author" class="form-control" @bind-Value="form.Author" />
+                            </div>
+                            <div class="col-sm-6 col-lg-3">
+                                <label for="status" class="form-label">Stato</label>
+                                <InputSelect id="status" class="form-select" @bind-Value="form.Status">
+                                    <option value="ToRead">Da leggere</option>
+                                    <option value="Reading">In lettura</option>
+                                    <option value="Finished">Terminato</option>
+                                </InputSelect>
+                            </div>
+                            <div class="col-sm-6 col-lg-3">
+                                <label for="rating" class="form-label">Voto</label>
+                                <InputSelect id="rating" class="form-select" @bind-Value="form.Rating">
+                                    <option value="">Nessuno</option>
+                                    <option value="1">1 / 5</option>
+                                    <option value="2">2 / 5</option>
+                                    <option value="3">3 / 5</option>
+                                    <option value="4">4 / 5</option>
+                                    <option value="5">5 / 5</option>
+                                </InputSelect>
+                            </div>
+                            <div class="col-sm-6 col-lg-3">
+                                <label for="current-page" class="form-label">Pagina attuale</label>
+                                <InputNumber id="current-page" class="form-control" @bind-Value="form.CurrentPage" min="0" />
+                            </div>
+                            <div class="col-sm-6 col-lg-3">
+                                <label for="total-pages" class="form-label">Pagine totali</label>
+                                <InputNumber id="total-pages" class="form-control" @bind-Value="form.TotalPages" min="1" />
+                            </div>
+                            <div class="col-md-6">
+                                <label for="finished-on" class="form-label">Terminato il</label>
+                                <InputDate id="finished-on" class="form-control" @bind-Value="form.FinishedOn" />
+                            </div>
+                            <div class="col-12">
+                                <label for="notes" class="form-label">Note</label>
+                                <InputTextArea id="notes" class="form-control" rows="3" @bind-Value="form.Notes" />
+                            </div>
+                        </div>
+                        <div class="d-flex gap-2 mt-4 border-top pt-3">
+                            <button type="submit" class="btn btn-primary">@(saving ? "Salvataggio..." : "Salva")</button>
+                            <button type="button" class="btn btn-outline-secondary" @onclick="CloseForm">Annulla</button>
+                        </div>
+                    </fieldset>
+                </EditForm>
+            </div>
+        </section>
+    }
+
+    <section class="library-panel rounded-3 border p-3 p-lg-4" aria-label="Elenco libri">
+        <form class="row g-3 align-items-end mb-4" @onsubmit="SearchAsync" @onsubmit:preventDefault>
+            <div class="col-12 col-md">
+                <label for="search" class="form-label">Titolo o autore</label>
+                <input id="search" type="search" class="form-control" placeholder="Cerca nella libreria" @bind="search" />
+            </div>
+            <div class="col-8 col-md-3">
+                <label for="sort" class="form-label">Ordina per</label>
+                <select id="sort" class="form-select" @bind="sort">
+                    <option value="recent">Più recenti</option>
+                    <option value="title">Titolo A-Z</option>
+                </select>
+            </div>
+            <div class="col-4 col-md-auto">
+                <button type="submit" class="btn btn-outline-primary w-100" disabled="@loading">Cerca</button>
+            </div>
+        </form>
+
+        @if (loading)
+        {
+            <p class="text-body-secondary" role="status">Caricamento...</p>
+        }
+        else if (string.IsNullOrWhiteSpace(error))
+        {
+            @if (books.Count == 0)
+            {
+                <div class="empty-library d-flex flex-column align-items-center justify-content-center text-center rounded-3 p-4">
+                    <p class="text-body-secondary mb-0">@(string.IsNullOrWhiteSpace(search) ? "Nessun libro inserito." : "Nessun risultato.")</p>
+                </div>
+            }
+            else
+            {
+                <p class="text-body-secondary small mb-2">Libri: @books.Count</p>
+                <div class="table-responsive">
+                    <table class="table table-hover align-middle mb-0 book-table">
+                        <caption class="visually-hidden">Elenco libri</caption>
+                        <thead>
+                            <tr>
+                                <th scope="col">Libro</th>
+                                <th scope="col">Stato</th>
+                                <th scope="col">Pagine</th>
+                                <th scope="col">Voto</th>
+                                <th scope="col">Azioni</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var book in books)
+                            {
+                                <tr @key="book.Id">
+                                    <td class="book-details">
+                                        <div class="fw-semibold">@book.Title</div>
+                                        <div class="text-body-secondary">@book.Author</div>
+                                        @if (!string.IsNullOrWhiteSpace(book.Notes) || book.FinishedOn.HasValue)
+                                        {
+                                            <details class="mt-1">
+                                                <summary class="small">Dettagli</summary>
+                                                @if (!string.IsNullOrWhiteSpace(book.Notes))
+                                                {
+                                                    <p class="book-notes small my-2">@book.Notes</p>
+                                                }
+                                                @if (book.FinishedOn.HasValue)
+                                                {
+                                                    <p class="small my-2">Terminato il @book.FinishedOn.Value.ToString("dd/MM/yyyy")</p>
+                                                }
+                                            </details>
+                                        }
+                                    </td>
+                                    <td data-label="Stato"><span class="badge rounded-pill status-@book.Status.ToString().ToLowerInvariant()">@StatusText(book.Status)</span></td>
+                                    <td data-label="Pagine" class="text-nowrap">@book.CurrentPage@(book.TotalPages.HasValue ? $" / {book.TotalPages}" : "")</td>
+                                    <td data-label="Voto" class="text-nowrap">@(book.Rating.HasValue ? $"{book.Rating} / 5" : "—")</td>
+                                    <td>
+                                        <div class="d-flex gap-2">
+                                            @if (pendingDeleteId == book.Id)
+                                            {
+                                                <span class="small align-self-center">Eliminare?</span>
+                                                <button type="button" class="btn btn-sm btn-danger" @onclick="() => DeleteAsync(book.Id)" disabled="@saving">Conferma</button>
+                                                <button type="button" class="btn btn-sm btn-outline-secondary" @onclick="() => pendingDeleteId = null" disabled="@saving">Annulla</button>
+                                            }
+                                            else
+                                            {
+                                                <button type="button" class="btn btn-sm btn-outline-primary" @onclick="() => StartEdit(book)" disabled="@saving" aria-label="Modifica @book.Title">Modifica</button>
+                                                <button type="button" class="btn btn-sm btn-outline-danger" @onclick="() => pendingDeleteId = book.Id" disabled="@saving" aria-label="Elimina @book.Title">Elimina</button>
+                                            }
+                                        </div>
+                                    </td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            }
+        }
+    </section>
+</main>
+
+@code {
+    private List<BookDto> books = new();
+    private SaveBookRequest form = new();
+    private string search = string.Empty;
+    private string sort = "recent";
+    private string? error;
+    private bool loading = true;
+    private bool saving;
+    private bool formVisible;
+    private int? editingId;
+    private int? pendingDeleteId;
+
+    protected override async Task OnInitializedAsync() => await LoadAsync();
+
+    private async Task SearchAsync() => await LoadAsync();
+
+    private async Task LoadAsync()
+    {
+        loading = true;
+        error = null;
+        try
+        {
+            books = await Api.GetBooksAsync(search, sort);
+        }
+        catch (HttpRequestException)
+        {
+            error = "Impossibile caricare i libri.";
+        }
+        catch (TaskCanceledException)
+        {
+            error = "La richiesta è scaduta. Riprova.";
+        }
+        catch (System.Text.Json.JsonException)
+        {
+            error = "Impossibile caricare i libri.";
+        }
+        finally
+        {
+            loading = false;
+        }
+    }
+
+    private void StartCreate()
+    {
+        form = new SaveBookRequest();
+        editingId = null;
+        pendingDeleteId = null;
+        formVisible = true;
+        error = null;
+    }
+
+    private void StartEdit(BookDto book)
+    {
+        editingId = book.Id;
+        pendingDeleteId = null;
+        form = new SaveBookRequest
+        {
+            Title = book.Title, Author = book.Author, Status = book.Status,
+            CurrentPage = book.CurrentPage, TotalPages = book.TotalPages,
+            Rating = book.Rating, Notes = book.Notes, FinishedOn = book.FinishedOn
+        };
+        formVisible = true;
+        error = null;
+    }
+
+    private void CloseForm()
+    {
+        formVisible = false;
+        editingId = null;
+    }
+
+    private async Task SaveAsync()
+    {
+        if (saving) return;
+        saving = true;
+        error = null;
+        try
+        {
+            if (editingId.HasValue) await Api.UpdateAsync(editingId.Value, form);
+            else await Api.CreateAsync(form);
+
+            CloseForm();
+            await LoadAsync();
+        }
+        catch (HttpRequestException)
+        {
+            error = "Impossibile salvare il libro. Riprova.";
+        }
+        catch (TaskCanceledException)
+        {
+            error = "La richiesta è scaduta. Aggiorna l'elenco prima di riprovare.";
+        }
+        finally
+        {
+            saving = false;
+        }
+    }
+
+    private async Task DeleteAsync(int id)
+    {
+        if (saving) return;
+        saving = true;
+        error = null;
+        try
+        {
+            await Api.DeleteAsync(id);
+            pendingDeleteId = null;
+            await LoadAsync();
+        }
+        catch (HttpRequestException)
+        {
+            error = "Impossibile eliminare il libro. Riprova.";
+        }
+        catch (TaskCanceledException)
+        {
+            error = "La richiesta è scaduta. Aggiorna l'elenco prima di riprovare.";
+        }
+        finally
+        {
+            saving = false;
+        }
+    }
+
+    private static string StatusText(BookStatus status) => status switch
+    {
+        BookStatus.Reading => "In lettura",
+        BookStatus.Finished => "Terminato",
+        _ => "Da leggere"
+    };
+}

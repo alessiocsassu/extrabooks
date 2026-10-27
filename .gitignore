@@ -1,0 +1,11 @@
+bin/
+obj/
+.vs/
+.vscode/*.user
+.env
+**/appsettings.Development.local.json
+TestResults/
+*.user
+*.suo
+.DS_Store
+.tmp-browser/

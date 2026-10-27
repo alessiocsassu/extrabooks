@@ -1,0 +1,77 @@
+services:
+  db:
+    image: mysql:8.4
+    restart: unless-stopped
+    environment:
+      MYSQL_DATABASE: extrabooks
+      MYSQL_USER: extrabooks
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:?Configura MYSQL_PASSWORD nel file .env}
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:?Configura MYSQL_ROOT_PASSWORD nel file .env}
+    ports:
+      - "127.0.0.1:3307:3306"
+    volumes:
+      - mysql_data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD-SHELL", 'MYSQL_PWD="$$MYSQL_PASSWORD" mysql --protocol=TCP -h 127.0.0.1 -u "$$MYSQL_USER" --database="$$MYSQL_DATABASE" --execute="SELECT 1" --silent >/dev/null']
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 20s
+
+  api:
+    build:
+      context: .
+      dockerfile: src/ExtraBooks.Api/Dockerfile
+    environment:
+      ASPNETCORE_URLS: http://+:8080
+      ConnectionStrings__Default: Server=db;Port=3306;Database=extrabooks;User=extrabooks;Password=${MYSQL_PASSWORD};
+      ApiKey: ${API_KEY:?Configura API_KEY nel file .env}
+    ports:
+      - "127.0.0.1:5152:8080"
+    depends_on:
+      db:
+        condition: service_healthy
+
+  web:
+    build:
+      context: .
+      dockerfile: src/ExtraBooks.Web/Dockerfile
+    environment:
+      ASPNETCORE_URLS: http://+:8080
+      Api__BaseUrl: http://api:8080/
+      Api__Key: ${API_KEY:?Configura API_KEY nel file .env}
+    ports:
+      - "127.0.0.1:5174:8080"
+    depends_on:
+      - api
+
+  db-test:
+    image: mysql:8.4
+    profiles: [tests]
+    environment:
+      MYSQL_DATABASE: extrabooks_tests
+      MYSQL_USER: test_user
+      MYSQL_PASSWORD: test_password
+      MYSQL_ROOT_PASSWORD: test_root_password
+    tmpfs:
+      - /var/lib/mysql
+    healthcheck:
+      test: ["CMD-SHELL", 'MYSQL_PWD="$$MYSQL_PASSWORD" mysql --protocol=TCP -h 127.0.0.1 -u "$$MYSQL_USER" --database="$$MYSQL_DATABASE" --execute="SELECT 1" --silent >/dev/null']
+      interval: 2s
+      timeout: 5s
+      retries: 30
+      start_period: 20s
+
+  tests:
+    profiles: [tests]
+    build:
+      context: .
+      dockerfile: tests/Dockerfile
+    environment:
+      TEST_MYSQL_CONNECTION_STRING: Server=db-test;Database=extrabooks_tests;User=test_user;Password=test_password;
+    depends_on:
+      db-test:
+        condition: service_healthy
+
+volumes:
+  mysql_data:
