@@ -10,7 +10,7 @@ public sealed class BookService
 
     public BookService(BooksDbContext db) => _db = db;
 
-    public async Task<List<BookDto>> GetAllAsync(string? search, string? sort, CancellationToken ct)
+    public async Task<List<BookDto>> GetAllAsync(string? search, string? sort, BookStatus? status, CancellationToken ct)
     {
         IQueryable<Book> query = _db.Books.AsNoTracking();
 
@@ -20,9 +20,22 @@ public sealed class BookService
             query = query.Where(book => book.Title.Contains(term) || book.Author.Contains(term));
         }
 
-        query = string.Equals(sort, "title", StringComparison.OrdinalIgnoreCase)
-            ? query.OrderBy(book => book.Title).ThenBy(book => book.Id)
-            : query.OrderByDescending(book => book.CreatedAtUtc).ThenByDescending(book => book.Id);
+        if (status.HasValue)
+            query = query.Where(book => book.Status == status.Value);
+
+        query = sort?.ToLowerInvariant() switch
+        {
+            "title" => query.OrderBy(book => book.Title).ThenBy(book => book.Id),
+            "status" => query.OrderBy(book => book.Status == BookStatus.ToRead ? 0 : book.Status == BookStatus.Reading ? 1 : 2)
+                .ThenBy(book => book.Title).ThenBy(book => book.Id),
+            "status-desc" => query.OrderByDescending(book => book.Status == BookStatus.ToRead ? 0 : book.Status == BookStatus.Reading ? 1 : 2)
+                .ThenBy(book => book.Title).ThenBy(book => book.Id),
+            "rating" => query.OrderByDescending(book => book.Rating.HasValue).ThenByDescending(book => book.Rating)
+                .ThenBy(book => book.Title).ThenBy(book => book.Id),
+            "rating-asc" => query.OrderByDescending(book => book.Rating.HasValue).ThenBy(book => book.Rating)
+                .ThenBy(book => book.Title).ThenBy(book => book.Id),
+            _ => query.OrderByDescending(book => book.CreatedAtUtc).ThenByDescending(book => book.Id)
+        };
 
         var books = await query.ToListAsync(ct);
         return books.Select(ToDto).ToList();

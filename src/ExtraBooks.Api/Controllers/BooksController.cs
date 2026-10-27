@@ -14,8 +14,15 @@ public sealed class BooksController : ControllerBase
 
     [HttpGet]
     public async Task<ActionResult<List<BookDto>>> GetAll(
-        [FromQuery] string? search, [FromQuery] string? sort, CancellationToken ct)
-        => Ok(await _service.GetAllAsync(search, sort, ct));
+        [FromQuery] string? search, [FromQuery] string? sort, [FromQuery] BookStatus? status, CancellationToken ct)
+    {
+        if (status.HasValue && !Enum.IsDefined(status.Value))
+        {
+            ModelState.AddModelError(nameof(status), "Stato non valido.");
+            return ValidationProblem(ModelState);
+        }
+        return Ok(await _service.GetAllAsync(search, sort, status, ct));
+    }
 
     [HttpGet("{id:int}")]
     public async Task<ActionResult<BookDto>> GetById(int id, CancellationToken ct)

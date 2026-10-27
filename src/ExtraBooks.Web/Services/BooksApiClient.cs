@@ -16,9 +16,10 @@ public sealed class BooksApiClient
         _jsonOptions.Converters.Add(new JsonStringEnumConverter());
     }
 
-    public async Task<List<BookDto>> GetBooksAsync(string? search, string sort)
+    public async Task<List<BookDto>> GetBooksAsync(string? search, string sort, BookStatus? status)
     {
         var url = $"api/books?search={Uri.EscapeDataString(search ?? string.Empty)}&sort={Uri.EscapeDataString(sort)}";
+        if (status.HasValue) url += $"&status={status.Value}";
         return await _http.GetFromJsonAsync<List<BookDto>>(url, _jsonOptions) ?? new();
     }
 

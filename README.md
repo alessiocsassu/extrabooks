@@ -84,7 +84,7 @@ docker compose --profile tests rm --stop --force db-test
 
 Il profilo `tests` usa un database separato, senza porte pubblicate e con dati temporanei in memoria. Non usa il volume dei libri. Le credenziali presenti nel profilo valgono soltanto per questo database.
 
-La suite comprende 24 casi unitari sulla validazione e 3 test di integrazione. Questi ultimi avviano l'API con `WebApplicationFactory` e verificano autenticazione, CRUD, normalizzazione degli input, ricerca, ordinamento, risposte 400/404 e persistenza su MySQL. I dati creati vengono rimossi a fine test.
+La suite comprende 24 casi unitari sulla validazione e 4 test di integrazione. Questi ultimi avviano l'API con `WebApplicationFactory` e verificano autenticazione, CRUD, normalizzazione degli input, ricerca, ordinamento, risposte 400/404 e persistenza su MySQL. I dati creati vengono rimossi a fine test.
 
 Eseguendo `dotnet test` senza `TEST_MYSQL_CONNECTION_STRING`, i test di integrazione risultano esplicitamente saltati. Per eseguirli fuori da Docker, la variabile deve indicare un database MySQL dedicato ai test, con permessi per creare le tabelle.
 
@@ -122,14 +122,14 @@ tests/
 | PUT | `/api/books/{id}` | 204 oppure 404 |
 | DELETE | `/api/books/{id}` | 204 oppure 404 |
 
-`sort=recent` è l'ordinamento predefinito. Gli stati JSON sono `ToRead`, `Reading` e `Finished`. Titolo e autore sono obbligatori; il voto è facoltativo, da 1 a 5. La pagina attuale non può superare il totale, quando indicato. Gli input non validi restituiscono 400; la chiave assente o errata restituisce 401.
+`sort=recent` è l'ordinamento predefinito. Sono disponibili anche `title`, `status`, `status-desc`, `rating` (voto decrescente) e `rating-asc` (voto crescente). I libri senza voto vengono sempre mostrati dopo quelli valutati; a parità si ordina per titolo. L'ordine degli stati è Da leggere, In lettura, Terminato. Il parametro facoltativo `status=ToRead`, `status=Reading` o `status=Finished` filtra lo stato e si combina con ricerca e ordinamento. Gli stati JSON sono `ToRead`, `Reading` e `Finished`. Titolo e autore sono obbligatori; il voto è facoltativo, da 1 a 5. La pagina attuale non può superare il totale, quando indicato. Gli input non validi restituiscono 400; la chiave assente o errata restituisce 401.
 
 ## Cosa migliorerei con più tempo
 
 - Migrazioni EF Core e una procedura di backup e aggiornamento del database.
 - Test del browser per form, conferma eliminazione, errori di rete e layout mobile.
 - Messaggi per i singoli errori di validazione restituiti dall'API, evitando il solo errore generico di salvataggio.
-- Paginazione, filtro per stato e ricerca mantenuta nell'URL per elenchi più grandi.
+- Paginazione e ricerca mantenuta nell'URL per elenchi più grandi.
 - Separazione del form dalla pagina quando crescono le funzioni.
 - Autenticazione e dati separati per utente, HTTPS e gestione dei segreti se il progetto viene pubblicato.
 - Aggiornamento a .NET LTS e pipeline CI per build e suite con MySQL.

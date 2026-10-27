@@ -56,6 +56,8 @@ body { min-height: 100vh; }
 }
 .table thead { background-color: #b7b7a4; font-size: .875rem; }
 .table th { font-weight: 600; }
+.table-sort { color: inherit; font-weight: inherit; text-decoration: none; padding: 0; min-height: auto; white-space: nowrap; }
+.table-sort:hover { color: #303329; text-decoration: underline; }
 .book-table td:first-child { width: 44%; }
 .book-table td:last-child { width: 1%; }
 

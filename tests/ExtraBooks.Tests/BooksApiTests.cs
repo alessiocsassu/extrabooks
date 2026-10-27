@@ -138,6 +138,61 @@ public sealed class BooksApiTests
         Assert.Empty(books!);
     }
 
+    [MySqlFact]
+    public async Task StatusFilter_CombinesWithSearch_AndSortingHandlesMissingRatings()
+    {
+        await using var factory = new ApiFactory();
+        using var client = factory.CreateClient();
+        client.DefaultRequestHeaders.Add("X-Api-Key", ApiKey);
+        var marker = Guid.NewGuid().ToString("N");
+        var books = new List<BookDto>();
+        try
+        {
+            foreach (var (title, status, rating) in new (string, BookStatus, int?)[]
+            {
+                ("Zeta", BookStatus.ToRead, null),
+                ("Alfa", BookStatus.Reading, 5),
+                ("Beta", BookStatus.Finished, 1),
+                ("Gamma", BookStatus.Reading, 5),
+                ("Delta", BookStatus.Finished, null)
+            })
+            {
+                books.Add(await CreateAsync(client, new SaveBookRequest
+                {
+                    Title = $"{title} {marker}", Author = $"Autore {marker}", Status = status, Rating = rating
+                }));
+            }
+
+            foreach (var (sort, expected) in new[]
+            {
+                ("status", new[] { 0, 1, 3, 2, 4 }),
+                ("status-desc", new[] { 2, 4, 1, 3, 0 }),
+                ("rating", new[] { 1, 3, 2, 4, 0 }),
+                ("rating-asc", new[] { 2, 1, 3, 4, 0 })
+            })
+            {
+                var result = await client.GetFromJsonAsync<List<BookDto>>($"/api/books?search={marker}&sort={sort}", Json);
+                Assert.Equal(expected.Select(i => books[i].Id), result!.Select(b => b.Id));
+            }
+
+            foreach (var status in Enum.GetValues<BookStatus>())
+            {
+                var result = await client.GetFromJsonAsync<List<BookDto>>($"/api/books?search=Autore%20{marker}&status={status}&sort=title", Json);
+                Assert.Equal(books.Where(b => b.Status == status).OrderBy(b => b.Title).Select(b => b.Id), result!.Select(b => b.Id));
+            }
+            var combined = await client.GetFromJsonAsync<List<BookDto>>($"/api/books?search=Alfa%20{marker}&status=Reading&sort=rating", Json);
+            Assert.Equal(books[1].Id, Assert.Single(combined!).Id);
+            var empty = await client.GetFromJsonAsync<List<BookDto>>($"/api/books?search=Alfa%20{marker}&status=Finished", Json);
+            Assert.Empty(empty!);
+            foreach (var invalid in new[] { "99", "unknown" })
+                Assert.Equal(HttpStatusCode.BadRequest, (await client.GetAsync($"/api/books?status={invalid}")).StatusCode);
+        }
+        finally
+        {
+            foreach (var book in books) await client.DeleteAsync($"/api/books/{book.Id}");
+        }
+    }
+
     private static async Task<BookDto> CreateAsync(HttpClient client, SaveBookRequest request)
     {
         using var response = await client.PostAsJsonAsync("/api/books", request, Json);

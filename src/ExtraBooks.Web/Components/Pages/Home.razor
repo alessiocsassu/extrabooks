@@ -95,18 +95,31 @@
 
     <section class="library-panel rounded-3 border p-3 p-lg-4" aria-label="Elenco libri">
         <form class="row g-3 align-items-end mb-4" @onsubmit="SearchAsync" @onsubmit:preventDefault>
-            <div class="col-12 col-md">
+            <div class="col-12 col-lg">
                 <label for="search" class="form-label">Titolo o autore</label>
                 <input id="search" type="search" class="form-control" placeholder="Cerca nella libreria" @bind="search" />
             </div>
-            <div class="col-8 col-md-3">
+            <div class="col-12 col-sm-6 col-lg-3">
+                <label for="status-filter" class="form-label">Stato</label>
+                <InputSelect id="status-filter" class="form-select" @bind-Value="statusFilter">
+                    <option value="">Tutti</option>
+                    <option value="ToRead">Da leggere</option>
+                    <option value="Reading">In lettura</option>
+                    <option value="Finished">Terminato</option>
+                </InputSelect>
+            </div>
+            <div class="col-12 col-sm-6 col-lg-3">
                 <label for="sort" class="form-label">Ordina per</label>
                 <select id="sort" class="form-select" @bind="sort">
                     <option value="recent">Più recenti</option>
                     <option value="title">Titolo A-Z</option>
+                    <option value="status">Stato di lettura</option>
+                    <option value="status-desc">Stato di lettura inverso</option>
+                    <option value="rating">Voto: dal più alto</option>
+                    <option value="rating-asc">Voto: dal più basso</option>
                 </select>
             </div>
-            <div class="col-4 col-md-auto">
+            <div class="col-12 col-lg-auto">
                 <button type="submit" class="btn btn-outline-primary w-100" disabled="@loading">Cerca</button>
             </div>
         </form>
@@ -120,7 +133,7 @@
             @if (books.Count == 0)
             {
                 <div class="empty-library d-flex flex-column align-items-center justify-content-center text-center rounded-3 p-4">
-                    <p class="text-body-secondary mb-0">@(string.IsNullOrWhiteSpace(search) ? "Nessun libro inserito." : "Nessun risultato.")</p>
+                    <p class="text-body-secondary mb-0">@(string.IsNullOrWhiteSpace(search) && !statusFilter.HasValue ? "Nessun libro inserito." : "Nessun risultato.")</p>
                 </div>
             }
             else
@@ -132,9 +145,13 @@
                         <thead>
                             <tr>
                                 <th scope="col">Libro</th>
-                                <th scope="col">Stato</th>
+                                <th scope="col" aria-sort="@(sort == "status" ? "ascending" : sort == "status-desc" ? "descending" : "none")">
+                                    <button type="button" class="btn btn-link table-sort" disabled="@loading" @onclick='() => SortByAsync("status", "status-desc")'>Stato @(sort == "status" ? "↑" : sort == "status-desc" ? "↓" : "↕")</button>
+                                </th>
                                 <th scope="col">Pagine</th>
-                                <th scope="col">Voto</th>
+                                <th scope="col" aria-sort="@(sort == "rating" ? "descending" : sort == "rating-asc" ? "ascending" : "none")">
+                                    <button type="button" class="btn btn-link table-sort" disabled="@loading" @onclick='() => SortByAsync("rating", "rating-asc")'>Voto @(sort == "rating" ? "↓" : sort == "rating-asc" ? "↑" : "↕")</button>
+                                </th>
                                 <th scope="col">Azioni</th>
                             </tr>
                         </thead>
@@ -193,6 +210,7 @@
     private SaveBookRequest form = new();
     private string search = string.Empty;
     private string sort = "recent";
+    private BookStatus? statusFilter;
     private string? error;
     private bool loading = true;
     private bool saving;
@@ -204,13 +222,19 @@
 
     private async Task SearchAsync() => await LoadAsync();
 
+    private async Task SortByAsync(string first, string second)
+    {
+        sort = sort == first ? second : first;
+        await LoadAsync();
+    }
+
     private async Task LoadAsync()
     {
         loading = true;
         error = null;
         try
         {
-            books = await Api.GetBooksAsync(search, sort);
+            books = await Api.GetBooksAsync(search, sort, statusFilter);
         }
         catch (HttpRequestException)
         {
