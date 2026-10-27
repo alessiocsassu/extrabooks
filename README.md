@@ -25,7 +25,7 @@ docker compose ps
 - Controllo avvio API: http://localhost:5152/health
 - MySQL locale: `127.0.0.1:3307`, database e utente `extrabooks`
 
-Il primo avvio scarica le immagini e applica le migrazioni EF Core. Se stai aggiornando un database creato dalla versione precedente, segui prima la procedura di adozione dello schema descritta sotto. Il database deve superare il controllo di salute prima che parta l'API. Le porte sono accessibili solo dal PC locale.
+Il primo avvio scarica le immagini e applica le migrazioni EF Core. Il database deve superare il controllo di salute prima che parta l'API. Le porte sono accessibili solo dal PC locale.
 
 ```powershell
 # Log dei servizi
@@ -98,7 +98,7 @@ La suite separata richiede Docker attivo e .NET SDK 9:
 dotnet test tests/ExtraBooks.MySqlTests -c Release
 ```
 
-Testcontainers crea un MySQL 8.4 temporaneo, con una porta assegnata dinamicamente, e lo rimuove al termine. La connessione viene ottenuta soltanto da quel container: la suite non legge `.env` e non accetta connection string esterne. I cinque test verificano schema e cronologia delle migrazioni, applicazione ripetuta senza perdita di dati, adozione dello schema precedente, rifiuto di schemi incompatibili, vincoli di lunghezza, CRUD e traduzione SQL di ricerca e ordinamenti. La ricerca con maiuscole e accenti verifica anche il comportamento della collation MySQL predefinita.
+Testcontainers crea un MySQL 8.4 temporaneo, con una porta assegnata dinamicamente, e lo rimuove al termine. La connessione viene ottenuta soltanto da quel container: la suite non legge `.env` e non accetta connection string esterne. I tre test verificano schema e cronologia delle migrazioni, applicazione ripetuta senza perdita di dati, vincoli di lunghezza, CRUD e traduzione SQL di ricerca e ordinamenti. La ricerca con maiuscole e accenti verifica anche il comportamento della collation MySQL predefinita.
 
 `dotnet test ExtraBooks.sln -c Release` esegue entrambe le suite e richiede quindi Docker. Se Docker non è disponibile, la suite MySQL fallisce esplicitamente: non viene saltata e non usa un database alternativo.
 
@@ -114,23 +114,7 @@ dotnet ef migrations add NomeModifica --project src/ExtraBooks.Api
 dotnet ef migrations has-pending-model-changes --project src/ExtraBooks.Api
 ```
 
-Rivedi il codice generato prima di applicarlo. L'API esegue `MigrateAsync` all'avvio sul database configurato. In alternativa, imposta `ConnectionStrings__Default` nel terminale ed esegui `dotnet ef database update --project src/ExtraBooks.Api`. Non usare più `EnsureCreated` su MySQL; resta solo nei test con persistenza in memoria e nella simulazione dello schema precedente.
-
-### Database della versione precedente
-
-Uno schema creato con `EnsureCreated` non ha la cronologia EF. Non cancellare i libri e non eseguire la migrazione iniziale sopra le tabelle esistenti.
-
-1. Ferma API e frontend con `docker compose stop api web`.
-2. Esegui un backup del database con `mysqldump`, conservandolo fuori da Git.
-3. Compila la nuova API e adotta lo schema:
-
-```powershell
-docker compose build api
-docker compose run --rm --no-deps api --baseline-existing-database
-docker compose up --build -d
-```
-
-Il comando controlla colonne, tipi, nullabilità, valori predefiniti, charset, indici e motore della tabella iniziale. Se corrispondono alla versione originaria registra `InitialCreate` nella cronologia, senza modificare i libri. Rifiuta database già migrati o schemi differenti: in quel caso occorre verificare lo schema e preparare un aggiornamento specifico. Per installazioni nuove non serve questo comando.
+Rivedi il codice generato prima di applicarlo. L'API esegue `MigrateAsync` all'avvio sul database configurato. In alternativa, imposta `ConnectionStrings__Default` nel terminale ed esegui `dotnet ef database update --project src/ExtraBooks.Api`.
 
 ## Continuous Integration
 

@@ -56,32 +56,6 @@ public sealed class MySqlDatabaseTests(MySqlFixture fixture) : IClassFixture<MyS
     }
 
     [Fact]
-    public async Task LegacyBaseline_PreservesBooks_AndAllowsMigrations()
-    {
-        await fixture.ResetAsync();
-        await using var db = fixture.CreateContext();
-        await db.Database.EnsureCreatedAsync();
-        db.Books.Add(new Book { Title = "Libro esistente", Author = "Autore", Notes = "Da conservare" });
-        await db.SaveChangesAsync();
-        await LegacyDatabaseBaseline.ApplyAsync(db);
-        await db.Database.MigrateAsync();
-        Assert.Single(await db.Database.GetAppliedMigrationsAsync());
-        Assert.Equal("Da conservare", (await db.Books.AsNoTracking().SingleAsync()).Notes);
-        await Assert.ThrowsAsync<InvalidOperationException>(() => LegacyDatabaseBaseline.ApplyAsync(db));
-    }
-
-    [Fact]
-    public async Task LegacyBaseline_RejectsDifferentSchema_WithoutRecordingMigration()
-    {
-        await fixture.ResetAsync();
-        await using var db = fixture.CreateContext();
-        await db.Database.EnsureCreatedAsync();
-        await db.Database.ExecuteSqlRawAsync("ALTER TABLE books ADD UnexpectedColumn int NULL");
-        await Assert.ThrowsAsync<InvalidOperationException>(() => LegacyDatabaseBaseline.ApplyAsync(db));
-        Assert.Empty(await db.Database.GetAppliedMigrationsAsync());
-    }
-
-    [Fact]
     public async Task MySql_EnforcesColumnLengths()
     {
         await fixture.ResetAsync();
