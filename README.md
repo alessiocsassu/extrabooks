@@ -25,7 +25,7 @@ docker compose ps
 - Controllo avvio API: http://localhost:5152/health
 - MySQL locale: `127.0.0.1:3307`, database e utente `extrabooks`
 
-Il primo avvio scarica le immagini e crea le tabelle. Il database deve superare il controllo di salute prima che parta l'API. Le porte sono accessibili solo dal PC locale.
+Il primo avvio scarica le immagini e applica le migrazioni EF Core. Se stai aggiornando un database creato dalla versione precedente, segui prima la procedura di adozione dello schema descritta sotto. Il database deve superare il controllo di salute prima che parta l'API. Le porte sono accessibili solo dal PC locale.
 
 ```powershell
 # Log dei servizi
@@ -74,10 +74,10 @@ La specifica OpenAPI è disponibile su http://localhost:5152/swagger/v1/swagger.
 
 ## Test
 
-Con .NET SDK 9, esegui tutta la suite senza avviare MySQL o l'applicazione:
+Con .NET SDK 9, esegui la suite rapida senza avviare MySQL o l'applicazione:
 
 ```powershell
-dotnet test ExtraBooks.sln
+dotnet test tests/ExtraBooks.Tests
 ```
 
 Oppure usa il runner Docker:
@@ -86,12 +86,61 @@ Oppure usa il runner Docker:
 docker compose --profile tests run --build --rm tests
 ```
 
-La suite comprende 31 casi unitari e 7 test HTTP con `WebApplicationFactory`. Il client HTTP dei test unitari usa un handler finto. I test degli endpoint sostituiscono completamente il contesto MySQL con EF Core InMemory, con un archivio diverso per ogni host di test. Non leggono `.env`, non usano connection string esterne e non aprono connessioni al database dell'applicazione. Il container dei test viene eseguito senza rete e senza volumi dati.
+La suite rapida comprende 31 casi unitari e 7 test HTTP con `WebApplicationFactory`. Il client HTTP dei test unitari usa un handler finto. I test degli endpoint sostituiscono completamente il contesto MySQL con EF Core InMemory, con un archivio diverso per ogni host di test. Non leggono `.env`, non usano connection string esterne e non aprono connessioni al database dell'applicazione. Il container dei test viene eseguito senza rete e senza volumi dati.
 
-I test verificano autenticazione, CRUD, validazione, filtri, ordinamento, gestione degli errori, Swagger e isolamento della persistenza. Nessun test richiede servizi esterni e nessun caso viene saltato per mancanza di MySQL. EF Core InMemory è una persistenza finta: questi test non verificano la traduzione SQL, la collation o i vincoli specifici di MySQL.
+I test verificano autenticazione, CRUD, validazione, filtri, ordinamento, gestione degli errori, Swagger e isolamento della persistenza. La suite rapida non richiede servizi esterni e nessun suo caso viene saltato per mancanza di MySQL. EF Core InMemory è una persistenza finta: questi test non verificano la traduzione SQL, la collation o i vincoli specifici di MySQL.
 
+### Test realistici con MySQL
+
+La suite separata richiede Docker attivo e .NET SDK 9:
+
+```powershell
+dotnet test tests/ExtraBooks.MySqlTests -c Release
+```
+
+Testcontainers crea un MySQL 8.4 temporaneo, con una porta assegnata dinamicamente, e lo rimuove al termine. La connessione viene ottenuta soltanto da quel container: la suite non legge `.env` e non accetta connection string esterne. I cinque test verificano schema e cronologia delle migrazioni, applicazione ripetuta senza perdita di dati, adozione dello schema precedente, rifiuto di schemi incompatibili, vincoli di lunghezza, CRUD e traduzione SQL di ricerca e ordinamenti. La ricerca con maiuscole e accenti verifica anche il comportamento della collation MySQL predefinita.
+
+`dotnet test ExtraBooks.sln -c Release` esegue entrambe le suite e richiede quindi Docker. Se Docker non è disponibile, la suite MySQL fallisce esplicitamente: non viene saltata e non usa un database alternativo.
 
 Prima della consegna sono stati verificati anche i flussi nel browser: inserimento e validazione, modifica, ricerca e ordinamento, persistenza dopo il ricaricamento, conferma e annullamento dell'eliminazione. Il layout è stato controllato a 320, 390, 768 e 1440 px. È stato simulato un errore di connessione all'API per verificare che il form conservi i dati. Questi controlli non fanno parte della suite di test inclusa nel repository.
+
+## Migrazioni del database
+
+La migrazione `InitialCreate` e lo snapshot del modello sono in `src/ExtraBooks.Api/Data/Migrations`. Per aggiungere una modifica allo schema:
+
+```powershell
+dotnet tool restore
+dotnet ef migrations add NomeModifica --project src/ExtraBooks.Api
+dotnet ef migrations has-pending-model-changes --project src/ExtraBooks.Api
+```
+
+Rivedi il codice generato prima di applicarlo. L'API esegue `MigrateAsync` all'avvio sul database configurato. In alternativa, imposta `ConnectionStrings__Default` nel terminale ed esegui `dotnet ef database update --project src/ExtraBooks.Api`. Non usare più `EnsureCreated` su MySQL; resta solo nei test con persistenza in memoria e nella simulazione dello schema precedente.
+
+### Database della versione precedente
+
+Uno schema creato con `EnsureCreated` non ha la cronologia EF. Non cancellare i libri e non eseguire la migrazione iniziale sopra le tabelle esistenti.
+
+1. Ferma API e frontend con `docker compose stop api web`.
+2. Esegui un backup del database con `mysqldump`, conservandolo fuori da Git.
+3. Compila la nuova API e adotta lo schema:
+
+```powershell
+docker compose build api
+docker compose run --rm --no-deps api --baseline-existing-database
+docker compose up --build -d
+```
+
+Il comando controlla colonne, tipi, nullabilità, valori predefiniti, charset, indici e motore della tabella iniziale. Se corrispondono alla versione originaria registra `InitialCreate` nella cronologia, senza modificare i libri. Rifiuta database già migrati o schemi differenti: in quel caso occorre verificare lo schema e preparare un aggiornamento specifico. Per installazioni nuove non serve questo comando.
+
+## Continuous Integration
+
+Il workflow `.github/workflows/ci.yml` parte su push, pull request e avvio manuale. Non richiede `.env` o segreti del database dell'applicazione.
+
+- **Build e test rapidi**: restore, build Release, verifica che il modello non abbia modifiche prive di migrazione e suite in memoria.
+- **Integrazione MySQL**: esegue i test con Testcontainers su un MySQL temporaneo del runner.
+- **Docker**: costruisce separatamente le immagini API e frontend, senza pubblicarle.
+
+I risultati dei test vengono salvati come artifact TRX anche in caso di errore. I job hanno timeout espliciti e permessi di sola lettura sul repository. L'esecuzione su GitHub sarà verificabile nella scheda Actions dopo il push.
 
 ## Struttura e scelte
 
@@ -101,7 +150,8 @@ src/
   ExtraBooks.Web/        Pagina Blazor, form e client HTTP
   ExtraBooks.Contracts/  DTO, stati del libro e regole di validazione condivise
 tests/
-  ExtraBooks.Tests/      Test unitari e di integrazione
+  ExtraBooks.Tests/      Test unitari e HTTP con persistenza finta
+  ExtraBooks.MySqlTests/ Migrazioni e API con MySQL temporaneo
   Dockerfile            Ambiente di esecuzione dei test
 ```
 
@@ -112,7 +162,7 @@ tests/
 - **Bootstrap 5.3.3**: griglia, form e pulsanti standard, con pochi stili per palette e adattamento della tabella su mobile. Il CSS Bootstrap è incluso nel progetto, senza CDN a runtime o build npm.
 - **Una pagina Blazor**: elenco e form restano in `Home.razor`, senza introdurre componenti per ogni campo. È adeguato alle dimensioni attuali.
 - **API key**: protegge gli endpoint `/api`, ma non è un login. L'interfaccia è pensata per un diario locale a singolo utente: chi accede al sito può modificare i libri.
-- **Schema con `EnsureCreatedAsync`**: permette il primo avvio senza comandi manuali. Non aggiorna schemi esistenti; un'evoluzione del modello richiederà migrazioni e un percorso di aggiornamento dei dati.
+- **Migrazioni EF Core**: schema e cronologia sono versionati. L'API applica le migrazioni all'avvio per semplificare la demo locale. Per un deployment con più istanze userei un passaggio di migrazione separato, prima di avviare i servizi.
 - **Docker multi-stage**: SDK nella build, runtime nelle immagini finali e processi applicativi eseguiti senza root. Compose coordina database, API e frontend; i dati MySQL rimangono in un volume persistente.
 
 ## API
@@ -137,14 +187,13 @@ La validazione degli input usa `ValidationProblemDetails` con stato 400, senza e
 
 ## Cosa migliorerei con più tempo
 
-- Migrazioni EF Core e una procedura di backup e aggiornamento del database.
-- Una suite opzionale separata su MySQL temporaneo per verificare anche SQL, collation e vincoli del database.
+- Backup pianificati e una procedura di ripristino verificata.
 - Test del browser per form, conferma eliminazione, errori di rete e layout mobile.
 - Associare gli errori di validazione restituiti dall'API ai singoli campi del form.
 - Paginazione e ricerca mantenuta nell'URL per elenchi più grandi.
 - Separazione del form dalla pagina quando crescono le funzioni.
 - Autenticazione e dati separati per utente, HTTPS e gestione dei segreti se il progetto viene pubblicato.
-- Aggiornamento a .NET LTS e pipeline CI per build e test.
+- Aggiornamento a .NET LTS e controllo delle dipendenze nella pipeline.
 
 ## Utilizzo di strumenti AI
 

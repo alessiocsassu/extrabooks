@@ -1,5 +1,6 @@
 FROM mcr.microsoft.com/dotnet/sdk:9.0
 WORKDIR /src
+COPY global.json .
 COPY src/ExtraBooks.Contracts/ src/ExtraBooks.Contracts/
 COPY src/ExtraBooks.Api/ src/ExtraBooks.Api/
 COPY src/ExtraBooks.Web/ src/ExtraBooks.Web/

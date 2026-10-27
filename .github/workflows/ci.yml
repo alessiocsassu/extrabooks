@@ -1,0 +1,55 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build-and-unit-tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '9.0.x'
+      - run: dotnet restore ExtraBooks.sln
+      - run: dotnet build ExtraBooks.sln -c Release --no-restore
+      - run: dotnet tool restore
+      - name: Check migration snapshot
+        run: dotnet ef migrations has-pending-model-changes --project src/ExtraBooks.Api --no-build --configuration Release
+      - name: Fast tests without external services
+        run: dotnet test tests/ExtraBooks.Tests -c Release --no-build --logger "trx;LogFileName=fast.trx"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: fast-test-results
+          path: tests/ExtraBooks.Tests/TestResults/*.trx
+
+  mysql-integration-tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '9.0.x'
+      - name: MySQL integration tests with disposable containers
+        run: dotnet test tests/ExtraBooks.MySqlTests -c Release --logger "trx;LogFileName=mysql.trx"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: mysql-test-results
+          path: tests/ExtraBooks.MySqlTests/TestResults/*.trx
+
+  docker-build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - run: docker build -f src/ExtraBooks.Api/Dockerfile -t extrabooks-api:ci .
+      - run: docker build -f src/ExtraBooks.Web/Dockerfile -t extrabooks-web:ci .

@@ -5,7 +5,8 @@ using ExtraBooks.Api.Services;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.OpenApi.Models;
 
-var builder = WebApplication.CreateBuilder(args);
+var baselineExistingDatabase = args.Contains("--baseline-existing-database");
+var builder = WebApplication.CreateBuilder(args.Where(arg => arg != "--baseline-existing-database").ToArray());
 
 var connectionString = builder.Configuration.GetConnectionString("Default")
     ?? throw new InvalidOperationException("ConnectionStrings:Default non configurata.");
@@ -45,11 +46,19 @@ builder.Services.AddControllers().AddJsonOptions(options =>
 
 var app = builder.Build();
 
-// Crea lo schema al primo avvio; non aggiorna database esistenti.
 using (var scope = app.Services.CreateScope())
 {
     var database = scope.ServiceProvider.GetRequiredService<BooksDbContext>();
-    await database.Database.EnsureCreatedAsync();
+    if (baselineExistingDatabase)
+    {
+        await LegacyDatabaseBaseline.ApplyAsync(database);
+        app.Logger.LogInformation("Schema esistente adottato. Nessun libro modificato.");
+        return;
+    }
+    if (database.Database.IsRelational())
+        await database.Database.MigrateAsync();
+    else
+        await database.Database.EnsureCreatedAsync();
 }
 
 app.UseExceptionHandler();
