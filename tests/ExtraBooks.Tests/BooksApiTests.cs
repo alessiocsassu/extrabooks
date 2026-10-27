@@ -39,6 +39,28 @@ public sealed class BooksApiTests
     }
 
     [MySqlFact]
+    public async Task MissingBook_ReturnsProblemDetails_ForGetUpdateAndDelete()
+    {
+        await using var factory = new ApiFactory();
+        using var client = factory.CreateClient();
+        client.DefaultRequestHeaders.Add("X-Api-Key", ApiKey);
+        var request = new SaveBookRequest { Title = "Titolo", Author = "Autore" };
+        using var get = await client.GetAsync("/api/books/-1");
+        using var put = await client.PutAsJsonAsync("/api/books/-1", request, Json);
+        using var delete = await client.DeleteAsync("/api/books/-1");
+        foreach (var response in new[] { get, put, delete })
+        {
+            Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
+            Assert.Equal("application/problem+json", response.Content.Headers.ContentType?.MediaType);
+            var problem = await response.Content.ReadFromJsonAsync<JsonElement>();
+            Assert.Equal(404, problem.GetProperty("status").GetInt32());
+            Assert.Equal("Libro non trovato", problem.GetProperty("title").GetString());
+            Assert.Equal("/api/books/-1", problem.GetProperty("instance").GetString());
+            Assert.False(string.IsNullOrWhiteSpace(problem.GetProperty("traceId").GetString()));
+        }
+    }
+
+    [MySqlFact]
     public async Task Authentication_RejectsMissingAndWrongKeys_ButAllowsHealth()
     {
         await using var factory = new ApiFactory();
@@ -46,7 +68,9 @@ public sealed class BooksApiTests
         Assert.Equal(HttpStatusCode.OK, (await client.GetAsync("/health")).StatusCode);
         Assert.Equal(HttpStatusCode.Unauthorized, (await client.GetAsync("/api/books")).StatusCode);
         client.DefaultRequestHeaders.Add("X-Api-Key", "wrong");
-        Assert.Equal(HttpStatusCode.Unauthorized, (await client.GetAsync("/api/books")).StatusCode);
+        using var unauthorized = await client.GetAsync("/api/books");
+        Assert.Equal(HttpStatusCode.Unauthorized, unauthorized.StatusCode);
+        Assert.Equal("application/problem+json", unauthorized.Content.Headers.ContentType?.MediaType);
     }
 
     [MySqlFact]

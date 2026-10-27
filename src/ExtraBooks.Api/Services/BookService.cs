@@ -1,4 +1,5 @@
 using ExtraBooks.Api.Data;
+using ExtraBooks.Api.Exceptions;
 using ExtraBooks.Contracts.Books;
 using Microsoft.EntityFrameworkCore;
 
@@ -41,10 +42,10 @@ public sealed class BookService
         return books.Select(ToDto).ToList();
     }
 
-    public async Task<BookDto?> GetByIdAsync(int id, CancellationToken ct)
+    public async Task<BookDto> GetByIdAsync(int id, CancellationToken ct)
     {
         var book = await _db.Books.AsNoTracking().FirstOrDefaultAsync(x => x.Id == id, ct);
-        return book is null ? null : ToDto(book);
+        return ToDto(book ?? throw new BookNotFoundException(id));
     }
 
     public async Task<BookDto> CreateAsync(SaveBookRequest request, CancellationToken ct)
@@ -56,24 +57,22 @@ public sealed class BookService
         return ToDto(book);
     }
 
-    public async Task<bool> UpdateAsync(int id, SaveBookRequest request, CancellationToken ct)
+    public async Task UpdateAsync(int id, SaveBookRequest request, CancellationToken ct)
     {
         var book = await _db.Books.FindAsync(new object[] { id }, ct);
-        if (book is null) return false;
+        if (book is null) throw new BookNotFoundException(id);
 
         Apply(book, request);
         await _db.SaveChangesAsync(ct);
-        return true;
     }
 
-    public async Task<bool> DeleteAsync(int id, CancellationToken ct)
+    public async Task DeleteAsync(int id, CancellationToken ct)
     {
         var book = await _db.Books.FindAsync(new object[] { id }, ct);
-        if (book is null) return false;
+        if (book is null) throw new BookNotFoundException(id);
 
         _db.Books.Remove(book);
         await _db.SaveChangesAsync(ct);
-        return true;
     }
 
     private static void Apply(Book book, SaveBookRequest request)

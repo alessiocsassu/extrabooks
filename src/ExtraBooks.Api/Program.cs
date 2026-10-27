@@ -19,6 +19,7 @@ builder.Services.AddDbContext<BooksDbContext>(options =>
 
 builder.Services.AddScoped<BookService>();
 builder.Services.AddProblemDetails();
+builder.Services.AddExceptionHandler<ApiExceptionHandler>();
 builder.Services.AddControllers().AddJsonOptions(options =>
     options.JsonSerializerOptions.Converters.Add(new JsonStringEnumConverter()));
 

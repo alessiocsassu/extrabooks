@@ -27,12 +27,8 @@ public sealed class ApiKeyMiddleware
         var providedBytes = Encoding.UTF8.GetBytes(provided);
         if (!CryptographicOperations.FixedTimeEquals(providedBytes, _expectedKey))
         {
-            context.Response.StatusCode = StatusCodes.Status401Unauthorized;
-            await context.Response.WriteAsJsonAsync(new
-            {
-                title = "API key mancante o non valida",
-                status = 401
-            });
+            await Results.Problem(statusCode: StatusCodes.Status401Unauthorized,
+                title: "API key mancante o non valida").ExecuteAsync(context);
             return;
         }
 

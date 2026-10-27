@@ -71,7 +71,7 @@ Gli indirizzi sono gli stessi dell'avvio Docker. `dotnet run` non carica automat
 Con .NET SDK 9, per i soli test unitari:
 
 ```powershell
-dotnet test ExtraBooks.sln --filter FullyQualifiedName~SaveBookRequestTests
+dotnet test ExtraBooks.sln --filter "FullyQualifiedName!~ExtraBooks.Tests.BooksApiTests"
 ```
 
 Per l'intera suite, inclusi i test di integrazione con MySQL reale:
@@ -84,7 +84,7 @@ docker compose --profile tests rm --stop --force db-test
 
 Il profilo `tests` usa un database separato, senza porte pubblicate e con dati temporanei in memoria. Non usa il volume dei libri. Le credenziali presenti nel profilo valgono soltanto per questo database.
 
-La suite comprende 24 casi unitari sulla validazione e 4 test di integrazione. Questi ultimi avviano l'API con `WebApplicationFactory` e verificano autenticazione, CRUD, normalizzazione degli input, ricerca, ordinamento, risposte 400/404 e persistenza su MySQL. I dati creati vengono rimossi a fine test.
+La suite comprende 31 casi unitari su validazione, handler degli errori e client HTTP e 5 test di integrazione. Questi ultimi avviano l'API con `WebApplicationFactory` e verificano autenticazione, CRUD, normalizzazione degli input, ricerca, ordinamento, risposte 400/404 e persistenza su MySQL. I dati creati vengono rimossi a fine test.
 
 Eseguendo `dotnet test` senza `TEST_MYSQL_CONNECTION_STRING`, i test di integrazione risultano esplicitamente saltati. Per eseguirli fuori da Docker, la variabile deve indicare un database MySQL dedicato ai test, con permessi per creare le tabelle.
 
@@ -124,11 +124,19 @@ tests/
 
 `sort=recent` è l'ordinamento predefinito. Sono disponibili anche `title`, `status`, `status-desc`, `rating` (voto decrescente) e `rating-asc` (voto crescente). I libri senza voto vengono sempre mostrati dopo quelli valutati; a parità si ordina per titolo. L'ordine degli stati è Da leggere, In lettura, Terminato. Il parametro facoltativo `status=ToRead`, `status=Reading` o `status=Finished` filtra lo stato e si combina con ricerca e ordinamento. Gli stati JSON sono `ToRead`, `Reading` e `Finished`. Titolo e autore sono obbligatori; il voto è facoltativo, da 1 a 5. La pagina attuale non può superare il totale, quando indicato. Gli input non validi restituiscono 400; la chiave assente o errata restituisce 401.
 
+## Gestione degli errori
+
+`ApiExceptionHandler` implementa `IExceptionHandler` e centralizza la conversione delle eccezioni in risposte `ProblemDetails`. `BookService` solleva `BookNotFoundException`, derivata da `DomainException`, quando un libro richiesto non esiste. L'handler restituisce 404; i controller gestiscono soltanto il percorso di successo.
+
+Gli errori inattesi restituiscono 500 con un messaggio generico. I dettagli tecnici vengono registrati nei log e la risposta include un `traceId` per collegarla alla richiesta. Le eccezioni non contengono codici HTTP: la traduzione resta nell'API. Gli errori di configurazione o connessione durante l'avvio fermano l'applicazione e restano nei log, perché la pipeline HTTP non è ancora attiva.
+
+La validazione degli input usa `ValidationProblemDetails` con stato 400, senza eccezioni dedicate. Il middleware della chiave restituisce `ProblemDetails` con stato 401. Nel frontend, `BooksApiClient` trasforma le risposte HTTP fallite in `ApiException`: Blazor mostra gli errori di validazione e messaggi specifici per accesso negato, libro mancante o servizio indisponibile. Il form conserva i dati in caso di errore; timeout e problemi di rete mantengono messaggi dedicati.
+
 ## Cosa migliorerei con più tempo
 
 - Migrazioni EF Core e una procedura di backup e aggiornamento del database.
 - Test del browser per form, conferma eliminazione, errori di rete e layout mobile.
-- Messaggi per i singoli errori di validazione restituiti dall'API, evitando il solo errore generico di salvataggio.
+- Associare gli errori di validazione restituiti dall'API ai singoli campi del form.
 - Paginazione e ricerca mantenuta nell'URL per elenchi più grandi.
 - Separazione del form dalla pagina quando crescono le funzioni.
 - Autenticazione e dati separati per utente, HTTPS e gestione dei segreti se il progetto viene pubblicato.

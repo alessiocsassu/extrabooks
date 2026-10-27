@@ -236,6 +236,10 @@
         {
             books = await Api.GetBooksAsync(search, sort, statusFilter);
         }
+        catch (ApiException exception)
+        {
+            error = exception.Message;
+        }
         catch (HttpRequestException)
         {
             error = "Impossibile caricare i libri.";
@@ -296,6 +300,10 @@
             CloseForm();
             await LoadAsync();
         }
+        catch (ApiException exception)
+        {
+            error = exception.Message;
+        }
         catch (HttpRequestException)
         {
             error = "Impossibile salvare il libro. Riprova.";
@@ -320,6 +328,10 @@
             await Api.DeleteAsync(id);
             pendingDeleteId = null;
             await LoadAsync();
+        }
+        catch (ApiException exception)
+        {
+            error = exception.Message;
         }
         catch (HttpRequestException)
         {

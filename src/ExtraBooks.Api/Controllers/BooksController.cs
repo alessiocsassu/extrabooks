@@ -27,8 +27,7 @@ public sealed class BooksController : ControllerBase
     [HttpGet("{id:int}")]
     public async Task<ActionResult<BookDto>> GetById(int id, CancellationToken ct)
     {
-        var book = await _service.GetByIdAsync(id, ct);
-        return book is null ? NotFound() : Ok(book);
+        return Ok(await _service.GetByIdAsync(id, ct));
     }
 
     [HttpPost]
@@ -40,9 +39,15 @@ public sealed class BooksController : ControllerBase
 
     [HttpPut("{id:int}")]
     public async Task<IActionResult> Update(int id, [FromBody] SaveBookRequest request, CancellationToken ct)
-        => await _service.UpdateAsync(id, request, ct) ? NoContent() : NotFound();
+    {
+        await _service.UpdateAsync(id, request, ct);
+        return NoContent();
+    }
 
     [HttpDelete("{id:int}")]
     public async Task<IActionResult> Delete(int id, CancellationToken ct)
-        => await _service.DeleteAsync(id, ct) ? NoContent() : NotFound();
+    {
+        await _service.DeleteAsync(id, ct);
+        return NoContent();
+    }
 }

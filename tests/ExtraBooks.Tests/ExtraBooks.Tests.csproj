@@ -13,5 +13,6 @@
     <PackageReference Include="xunit.runner.visualstudio" Version="3.0.1" />
     <ProjectReference Include="../../src/ExtraBooks.Contracts/ExtraBooks.Contracts.csproj" />
     <ProjectReference Include="../../src/ExtraBooks.Api/ExtraBooks.Api.csproj" />
+    <ProjectReference Include="../../src/ExtraBooks.Web/ExtraBooks.Web.csproj" />
   </ItemGroup>
 </Project>
