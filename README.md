@@ -4,26 +4,21 @@ Diario di lettura in Blazor: inserimento, modifica ed eliminazione dei libri, ri
 
 ## Avvio con Docker
 
-Serve Docker Desktop con supporto ai container Linux e Docker Compose. Non occorre installare .NET o MySQL.
-
 Dalla cartella del progetto, in PowerShell:
 
 ```powershell
-# Solo al primo avvio: non sovrascrivere un .env già configurato.
 Copy-Item .env.example .env
 ```
 
-Modifica `.env` impostando `API_KEY`, `MYSQL_PASSWORD` e `MYSQL_ROOT_PASSWORD`. Per le password locali usa stringhe lunghe di lettere e numeri, evitando i separatori delle connection string. Il file è escluso da Git e dal contesto di build Docker.
-
+Modifica `.env` impostando `API_KEY`, `MYSQL_PASSWORD` e `MYSQL_ROOT_PASSWORD`.
 ```powershell
 docker compose up --build -d
 docker compose ps
 ```
 
 - Sito: http://localhost:5174
-- API: http://localhost:5152/api/books, con header `X-Api-Key`
-- Controllo avvio API: http://localhost:5152/health
-- MySQL locale: `127.0.0.1:3307`, database e utente `extrabooks`
+- API su Swagger: http://localhost:5152/swagger
+- MySQL locale: `127.0.0.1:3307`
 
 Il primo avvio scarica le immagini e applica le migrazioni EF Core. Il database deve superare il controllo di salute prima che parta l'API. Le porte sono accessibili solo dal PC locale.
 
@@ -169,15 +164,15 @@ Gli errori inattesi restituiscono 500 con un messaggio generico. I dettagli tecn
 
 La validazione degli input usa `ValidationProblemDetails` con stato 400, senza eccezioni dedicate. Il middleware della chiave restituisce `ProblemDetails` con stato 401. Nel frontend, `BooksApiClient` trasforma le risposte HTTP fallite in `ApiException`: Blazor mostra gli errori di validazione e messaggi specifici per accesso negato, libro mancante o servizio indisponibile. Il form conserva i dati in caso di errore; timeout e problemi di rete mantengono messaggi dedicati.
 
-## Cosa migliorerei con più tempo
+## Aggiornamenti e migliorie future
 
-- Backup pianificati e una procedura di ripristino verificata.
-- Test del browser per form, conferma eliminazione, errori di rete e layout mobile.
 - Associare gli errori di validazione restituiti dall'API ai singoli campi del form.
 - Paginazione e ricerca mantenuta nell'URL per elenchi più grandi.
 - Separazione del form dalla pagina quando crescono le funzioni.
-- Autenticazione e dati separati per utente, HTTPS e gestione dei segreti se il progetto viene pubblicato.
-- Aggiornamento a .NET LTS e controllo delle dipendenze nella pipeline.
+- Autenticazione e dati separati per utente.
+- Aggiunta di libri tramite inserimento di ISBN verso Open Library API.
+- Aggiunta di copertine dei libri.
+- Modifica all'attuale struttura del database, la struttura ideale risulterebbe avere oltre alle entità dei libri e degli utenti una tabella pivot contenente dati ulteriori relativi a recensione voto e stato, più un'entità ulteriore che indica commenti accumulabili nel tempo.
 
 ## Utilizzo di strumenti AI
 
