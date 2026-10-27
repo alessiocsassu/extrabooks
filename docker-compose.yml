@@ -24,6 +24,7 @@ services:
       dockerfile: src/ExtraBooks.Api/Dockerfile
     environment:
       ASPNETCORE_URLS: http://+:8080
+      Swagger__Enabled: "true"
       ConnectionStrings__Default: Server=db;Port=3306;Database=extrabooks;User=extrabooks;Password=${MYSQL_PASSWORD};
       ApiKey: ${API_KEY:?Configura API_KEY nel file .env}
     ports:
@@ -45,33 +46,12 @@ services:
     depends_on:
       - api
 
-  db-test:
-    image: mysql:8.4
-    profiles: [tests]
-    environment:
-      MYSQL_DATABASE: extrabooks_tests
-      MYSQL_USER: test_user
-      MYSQL_PASSWORD: test_password
-      MYSQL_ROOT_PASSWORD: test_root_password
-    tmpfs:
-      - /var/lib/mysql
-    healthcheck:
-      test: ["CMD-SHELL", 'MYSQL_PWD="$$MYSQL_PASSWORD" mysql --protocol=TCP -h 127.0.0.1 -u "$$MYSQL_USER" --database="$$MYSQL_DATABASE" --execute="SELECT 1" --silent >/dev/null']
-      interval: 2s
-      timeout: 5s
-      retries: 30
-      start_period: 20s
-
   tests:
     profiles: [tests]
+    network_mode: none
     build:
       context: .
       dockerfile: tests/Dockerfile
-    environment:
-      TEST_MYSQL_CONNECTION_STRING: Server=db-test;Database=extrabooks_tests;User=test_user;Password=test_password;
-    depends_on:
-      db-test:
-        condition: service_healthy
 
 volumes:
   mysql_data:

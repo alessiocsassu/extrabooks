@@ -66,27 +66,30 @@ dotnet run --project src/ExtraBooks.Web
 
 Gli indirizzi sono gli stessi dell'avvio Docker. `dotnet run` non carica automaticamente il file `.env`.
 
+## Swagger
+
+Apri http://localhost:5152/swagger e premi **Authorize**. Inserisci soltanto il valore `API_KEY` del file `.env`: Swagger lo invia nell'header `X-Api-Key`. Puoi poi usare **Try it out** per provare CRUD, ricerca, filtri e ordinamento. Le operazioni di scrittura eseguite qui modificano i libri dell'applicazione.
+
+La specifica OpenAPI è disponibile su http://localhost:5152/swagger/v1/swagger.json. Swagger è attivo in Development e nel Compose locale tramite `Swagger__Enabled=true`; altrove resta disattivato salvo configurazione esplicita. Le API continuano a richiedere la chiave anche quando Swagger è abilitato.
+
 ## Test
 
-Con .NET SDK 9, per i soli test unitari:
+Con .NET SDK 9, esegui tutta la suite senza avviare MySQL o l'applicazione:
 
 ```powershell
-dotnet test ExtraBooks.sln --filter "FullyQualifiedName!~ExtraBooks.Tests.BooksApiTests"
+dotnet test ExtraBooks.sln
 ```
 
-Per l'intera suite, inclusi i test di integrazione con MySQL reale:
+Oppure usa il runner Docker:
 
 ```powershell
 docker compose --profile tests run --build --rm tests
-# Ferma e rimuovi solo il database temporaneo dei test
-docker compose --profile tests rm --stop --force db-test
 ```
 
-Il profilo `tests` usa un database separato, senza porte pubblicate e con dati temporanei in memoria. Non usa il volume dei libri. Le credenziali presenti nel profilo valgono soltanto per questo database.
+La suite comprende 31 casi unitari e 7 test HTTP con `WebApplicationFactory`. Il client HTTP dei test unitari usa un handler finto. I test degli endpoint sostituiscono completamente il contesto MySQL con EF Core InMemory, con un archivio diverso per ogni host di test. Non leggono `.env`, non usano connection string esterne e non aprono connessioni al database dell'applicazione. Il container dei test viene eseguito senza rete e senza volumi dati.
 
-La suite comprende 31 casi unitari su validazione, handler degli errori e client HTTP e 5 test di integrazione. Questi ultimi avviano l'API con `WebApplicationFactory` e verificano autenticazione, CRUD, normalizzazione degli input, ricerca, ordinamento, risposte 400/404 e persistenza su MySQL. I dati creati vengono rimossi a fine test.
+I test verificano autenticazione, CRUD, validazione, filtri, ordinamento, gestione degli errori, Swagger e isolamento della persistenza. Nessun test richiede servizi esterni e nessun caso viene saltato per mancanza di MySQL. EF Core InMemory è una persistenza finta: questi test non verificano la traduzione SQL, la collation o i vincoli specifici di MySQL.
 
-Eseguendo `dotnet test` senza `TEST_MYSQL_CONNECTION_STRING`, i test di integrazione risultano esplicitamente saltati. Per eseguirli fuori da Docker, la variabile deve indicare un database MySQL dedicato ai test, con permessi per creare le tabelle.
 
 Prima della consegna sono stati verificati anche i flussi nel browser: inserimento e validazione, modifica, ricerca e ordinamento, persistenza dopo il ricaricamento, conferma e annullamento dell'eliminazione. Il layout è stato controllato a 320, 390, 768 e 1440 px. È stato simulato un errore di connessione all'API per verificare che il form conservi i dati. Questi controlli non fanno parte della suite di test inclusa nel repository.
 
@@ -135,12 +138,13 @@ La validazione degli input usa `ValidationProblemDetails` con stato 400, senza e
 ## Cosa migliorerei con più tempo
 
 - Migrazioni EF Core e una procedura di backup e aggiornamento del database.
+- Una suite opzionale separata su MySQL temporaneo per verificare anche SQL, collation e vincoli del database.
 - Test del browser per form, conferma eliminazione, errori di rete e layout mobile.
 - Associare gli errori di validazione restituiti dall'API ai singoli campi del form.
 - Paginazione e ricerca mantenuta nell'URL per elenchi più grandi.
 - Separazione del form dalla pagina quando crescono le funzioni.
 - Autenticazione e dati separati per utente, HTTPS e gestione dei segreti se il progetto viene pubblicato.
-- Aggiornamento a .NET LTS e pipeline CI per build e suite con MySQL.
+- Aggiornamento a .NET LTS e pipeline CI per build e test.
 
 ## Utilizzo di strumenti AI
 

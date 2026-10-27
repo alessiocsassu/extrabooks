@@ -6,6 +6,7 @@
   </PropertyGroup>
   <ItemGroup>
     <PackageReference Include="Pomelo.EntityFrameworkCore.MySql" Version="9.0.0" />
+    <PackageReference Include="Swashbuckle.AspNetCore" Version="7.2.0" />
     <ProjectReference Include="../ExtraBooks.Contracts/ExtraBooks.Contracts.csproj" />
   </ItemGroup>
 </Project>

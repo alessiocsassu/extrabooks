@@ -3,21 +3,16 @@ using System.Net.Http.Json;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using ExtraBooks.Contracts.Books;
+using ExtraBooks.Api.Data;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 using Xunit;
 
 namespace ExtraBooks.Tests;
-
-// L'esecuzione completa usa il database temporaneo del profilo Docker "tests".
-public sealed class MySqlFactAttribute : FactAttribute
-{
-    public MySqlFactAttribute()
-    {
-        if (string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable("TEST_MYSQL_CONNECTION_STRING")))
-            Skip = "Richiede TEST_MYSQL_CONNECTION_STRING. Usare il profilo Docker tests.";
-    }
-}
 
 public sealed class BooksApiTests
 {
@@ -32,13 +27,54 @@ public sealed class BooksApiTests
         protected override void ConfigureWebHost(IWebHostBuilder builder)
         {
             builder.UseEnvironment("Testing");
-            builder.UseSetting("ConnectionStrings:Default",
-                Environment.GetEnvironmentVariable("TEST_MYSQL_CONNECTION_STRING"));
+            builder.UseSetting("ConnectionStrings:Default", "Server=must-not-connect;Database=unused;");
             builder.UseSetting("ApiKey", ApiKey);
+            builder.UseSetting("Swagger:Enabled", "true");
+            builder.ConfigureServices(services =>
+            {
+                services.RemoveAll<BooksDbContext>();
+                services.RemoveAll<DbContextOptions<BooksDbContext>>();
+                services.RemoveAll<IDbContextOptionsConfiguration<BooksDbContext>>();
+                var databaseName = Guid.NewGuid().ToString();
+                services.AddDbContext<BooksDbContext>(options => options.UseInMemoryDatabase(databaseName));
+            });
         }
     }
 
-    [MySqlFact]
+    [Fact]
+    public async Task TestHost_UsesOnlyInMemoryPersistence_AndIsolatesEachFactory()
+    {
+        await using var first = new ApiFactory();
+        using var client = first.CreateClient();
+        client.DefaultRequestHeaders.Add("X-Api-Key", ApiKey);
+        using (var scope = first.Services.CreateScope())
+            Assert.True(scope.ServiceProvider.GetRequiredService<BooksDbContext>().Database.IsInMemory());
+        var book = await CreateAsync(client, new SaveBookRequest { Title = "Isolamento", Author = "Test" });
+
+        await using var second = new ApiFactory();
+        using var other = second.CreateClient();
+        other.DefaultRequestHeaders.Add("X-Api-Key", ApiKey);
+        Assert.Equal(HttpStatusCode.NotFound, (await other.GetAsync($"/api/books/{book.Id}")).StatusCode);
+    }
+
+    [Fact]
+    public async Task Swagger_DescribesEndpointsAndApiKey_WithoutUnlockingApi()
+    {
+        await using var factory = new ApiFactory();
+        using var client = factory.CreateClient();
+        using var response = await client.GetAsync("/swagger/v1/swagger.json");
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var document = await response.Content.ReadFromJsonAsync<JsonElement>();
+        Assert.True(document.GetProperty("paths").TryGetProperty("/api/books", out var endpoint));
+        Assert.True(endpoint.TryGetProperty("post", out _));
+        var scheme = document.GetProperty("components").GetProperty("securitySchemes").GetProperty("ApiKey");
+        Assert.Equal("apiKey", scheme.GetProperty("type").GetString());
+        Assert.Equal("X-Api-Key", scheme.GetProperty("name").GetString());
+        Assert.Equal(HttpStatusCode.OK, (await client.GetAsync("/swagger/index.html")).StatusCode);
+        Assert.Equal(HttpStatusCode.Unauthorized, (await client.GetAsync("/api/books")).StatusCode);
+    }
+
+    [Fact]
     public async Task MissingBook_ReturnsProblemDetails_ForGetUpdateAndDelete()
     {
         await using var factory = new ApiFactory();
@@ -60,7 +96,7 @@ public sealed class BooksApiTests
         }
     }
 
-    [MySqlFact]
+    [Fact]
     public async Task Authentication_RejectsMissingAndWrongKeys_ButAllowsHealth()
     {
         await using var factory = new ApiFactory();
@@ -73,8 +109,8 @@ public sealed class BooksApiTests
         Assert.Equal("application/problem+json", unauthorized.Content.Headers.ContentType?.MediaType);
     }
 
-    [MySqlFact]
-    public async Task Crud_SearchAndSort_PersistChangesInMySql()
+    [Fact]
+    public async Task Crud_SearchAndSort_PersistChangesInMemory()
     {
         await using var factory = new ApiFactory();
         using var client = factory.CreateClient();
@@ -136,7 +172,7 @@ public sealed class BooksApiTests
         }
     }
 
-    [MySqlFact]
+    [Fact]
     public async Task InvalidRequests_ReturnBadRequest_AndDoNotCreateBooks()
     {
         await using var factory = new ApiFactory();
@@ -162,7 +198,7 @@ public sealed class BooksApiTests
         Assert.Empty(books!);
     }
 
-    [MySqlFact]
+    [Fact]
     public async Task StatusFilter_CombinesWithSearch_AndSortingHandlesMissingRatings()
     {
         await using var factory = new ApiFactory();
